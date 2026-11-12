@@ -256,7 +256,7 @@ X_fcm = X_scaled.T
 # Fit Fuzzy C-Means
 centres_scaled, U, u0, d, jm, p, fpc = fuzz.cluster.cmeans(
     X_fcm,
-    c=4,
+    c=2, #so my k=4
     m=2,
     error=0.005,
     maxiter=1000,
@@ -281,6 +281,14 @@ print("Membership matrix shape:", U.shape)
 print("First five membership vectors:\n", np.round(U[:5], 3))
 print("Row sums:", U.sum(axis=1)[:5].round(4))
 
+
+print("\nFuzzy C-Means customer results:")
+
+print(df[[
+    "fcm_cluster",
+    "fcm_max_membership",
+    "fcm_membership_gap"
+]].head(10).round(3))
 #c=4 no of clusters,
 # m=2 fuzines sparameter   if is close to 1 observation stronglyto one cluster #m=2 because It is a commonly used standard value that allows some overlap between clusters without making memberships too evenly distributed.
 #maxiteration=1000 It gives the model up to 1,000 attempts to improve the clustering before stopping.
@@ -290,3 +298,96 @@ print("Row sums:", U.sum(axis=1)[:5].round(4))
 #Unlike K-Means, observations can have different degrees of membership in multiple clusters.
 # we also recordes the macimum mebership which is the highest membership fpr each observation
 #also record membership gap:Measures the difference between the two highest membership values. A large gap indicates clearer cluster affiliation, while a small gap indicates greater overlap.
+
+
+# analysing result
+#Membership matrix shape: (200, 4) 200 rpw 4 column
+#person 1 is in [[0.431 0.249 0.148 0.171]
+
+
+comparison = []
+
+for candidate_k in [3, 4, 5, 6]:
+
+    # Fit Fuzzy C-Means using scikit-fuzzy
+    centres_k, U_k, u0, d, jm, p, fpc = fuzz.cluster.cmeans(
+        X_scaled.T,
+        c=candidate_k,
+        m=2,
+        error=0.005,
+        maxiter=1000,
+        seed=42
+    )
+
+    # Transpose membership matrix back
+    U_k = U_k.T
+
+    # Calculate maximum membership
+    max_membership = U_k.max(axis=1)
+
+    # Calculate membership gap
+    sorted_memberships = np.sort(U_k, axis=1)
+    gap = sorted_memberships[:, -1] - sorted_memberships[:, -2]
+
+    # Store comparison results
+    comparison.append({
+        "K": candidate_k,
+        "mean_max_membership": max_membership.mean(),
+        "median_max_membership": np.median(max_membership),
+        "mean_top_two_gap": gap.mean()
+    })
+
+# Display results
+comparison_df = pd.DataFrame(comparison).round(3)
+
+print("\nFCM comparison for different numbers of clusters:")
+print(comparison_df)
+
+#Mean max membership: Average of the highest membership value assigned to each observation. Higher means observations belong more strongly to one cluster.
+#Median max membership: The median of the highest membership values. Higher means the typical observation has a clearer cluster assignment.
+#Mean top-two gap: Average difference between the highest and second-highest membership values. Higher means less ambiguity between the two most likely clusters.
+
+# would choose K = 3 because:
+#It has the highest mean maximum membership (0.653), meaning observations have stronger membership in their assigned clusters.
+#It has the highest median maximum membership (0.630), suggesting that cluster assignments are generally clearer.
+#however thr mean top two gap was highest with 6 whivh showed that 6 achieves a slightly higher separation between the two most likely cluster memberships
+
+#I selected K = 3 because it provides the strongest overall membership certainty, although K = 6 achieves a slightly higher separation between the two most likely cluster membership
+
+# waning
+#Interpret carefully:
+# mean maximum membership and the top-two gap describe the sharpness of the fuzzy partition, not model accuracy. Different K values also change the number and meaning of the segments.
+# they dont tell you how accurate it is
+
+#can copy this
+'''
+The mean maximum membership and mean top-two gap were used to assess the sharpness of the fuzzy partition 
+rather than the accuracy of the clustering solution. K = 3 achieved the highest mean and median maximum membership, suggesting clearer membership assignments. However, K = 6 achieved the highest top-two gap'''
+
+'''
+Higher mean maximum membership: Observations have stronger membership in their most likely cluster.
+
+Higher top-two gap: There is a bigger difference between the first and second cluster membership, meaning less ambiguity.
+
+Lower values: Membership assignments tend to be less clear, with more uncertainty about which cluster an observation belongs to.'''
+
+
+plot_df = df.copy()
+plt.figure(figsize=(7, 5))
+sns.scatterplot(data=plot_df, x=features[1], y=features[2],
+hue="fcm_cluster", palette="tab10")
+plt.title("FCM: provisional labels by maximum membership")
+plt.tight_layout()
+plt.show()
+# Membership sharpness
+plt.figure(figsize=(7, 4))
+sns.histplot(df["fcm_max_membership"], bins=20, kde=True)
+plt.xlabel("Maximum FCM membership")
+plt.title("How sharply are customers assigned?")
+plt.tight_layout()
+plt.show()
+
+#graph interpretation
+'''The histogram illustrates the distribution of maximum Fuzzy C-Means (FCM) membership values across customers. Most customers have maximum membership scores between approximately 0.68 and 0.90, with the distribution peaking around 0.75–0.78. This indicates that the majority of customers have a relatively strong association with one particular cluster, although their assignments are not entirely definitive. A smaller proportion of customers exhibit membership values above 0.90, suggesting highly confident cluster assignments, while customers with lower membership values may possess characteristics that overlap across multiple clusters'''
+
+
